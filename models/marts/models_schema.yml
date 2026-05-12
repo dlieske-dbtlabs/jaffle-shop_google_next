@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: stg_regional_targets
+    description: >
+      Lightly transformed staging model over the regional_sales_targets seed.
+      Casts types, applies project naming conventions, and adds a surrogate key.
+      One row per location per month.
+    columns:
+      - name: regional_target_id
+        description: Surrogate key generated from location_id and target_month.
+        tests:
+          - unique
+          - not_null
+
+      - name: location_id
+        description: Foreign key to the locations mart. Matches location_id in stg_orders and orders.
+        tests:
+          - not_null
+
+      - name: target_month
+        description: First day of the calendar month this target applies to.
+        tests:
+          - not_null
+
+      - name: monthly_revenue_target
+        description: >
+          Monthly revenue target in USD for this location. Calculated as the
+          location's historical monthly order_total multiplied by 1.5 (50% growth target).
+        tests:
+          - not_null
+
+  - name: mart_regional_revenue_vs_target
+    description: >
+      Monthly revenue performance vs. target by location. Joins the orders mart
+      (aggregated to location-month grain) to stg_regional_targets. Surfaces
+      actual revenue, target, attainment percentage, and absolute delta.
+      One row per location per month.
+    columns:
+      - name: location_id
+        description: The location this row pertains to. Foreign key to the locations mart.
+        tests:
+          - not_null
+
+      - name: target_month
+        description: The first day of the calendar month being measured.
+        tests:
+          - not_null
+
+      - name: actual_revenue
+        description: Sum of order_total for this location in this month, in USD.
+        tests:
+          - not_null
+
+      - name: monthly_revenue_target
+        description: >
+          The revenue target for this location and month from stg_regional_targets.
+          Null if no target row exists for this location-month combination.
+
+      - name: revenue_attainment_pct
+        description: >
+          Actual revenue divided by monthly_revenue_target, expressed as a percentage.
+          Null when monthly_revenue_target is null or zero to prevent division errors.
+
+      - name: revenue_vs_target_delta
+        description: >
+          Absolute difference between actual_revenue and monthly_revenue_target (actual minus target).
+          Positive values indicate over-attainment; negative values indicate a shortfall.
+          Defaults to actual_revenue when no target exists (coalesces target to 0).

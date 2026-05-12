@@ -1,0 +1,65 @@
+version: 2
+
+semantic_models:
+  - name: regional_revenue_vs_target
+    description: >
+      Semantic model over mart_regional_revenue_vs_target. Exposes monthly
+      revenue attainment by location for use by BI tools and AI agents via
+      the dbt Semantic Layer. Excludes rows where no target exists or the
+      target is zero.
+    model: ref('mart_regional_revenue_vs_target')
+    defaults:
+      agg_time_dimension: target_month
+
+    entities:
+      - name: location
+        type: foreign
+        expr: location_id
+
+    dimensions:
+      - name: target_month
+        type: time
+        type_params:
+          time_granularity: month
+        expr: target_month
+
+      - name: location_id
+        type: categorical
+        expr: location_id
+
+    measures:
+      - name: revenue_attainment_pct
+        description: >
+          Percentage of monthly revenue target achieved for this location and month.
+          Null rows (missing or zero target) are excluded via the metric filter.
+        agg: average
+        expr: revenue_attainment_pct
+
+      - name: actual_revenue
+        description: Sum of order_total for this location and month.
+        agg: sum
+        expr: actual_revenue
+
+      - name: monthly_revenue_target
+        description: The revenue target for this location and month.
+        agg: sum
+        expr: monthly_revenue_target
+
+      - name: revenue_vs_target_delta
+        description: Absolute dollar difference between actual revenue and target.
+        agg: sum
+        expr: revenue_vs_target_delta
+
+metrics:
+  - name: regional_revenue_attainment
+    description: >
+      Percentage of monthly revenue target achieved by region. Excludes any
+      location-month combinations where the target is null or zero to ensure
+      only meaningful attainment values are surfaced.
+    type: simple
+    label: Regional Revenue Attainment (%)
+    type_params:
+      measure: revenue_attainment_pct
+    filter: |
+      {{ Dimension('regional_revenue_vs_target__monthly_revenue_target') }} IS NOT NULL
+      AND {{ Dimension('regional_revenue_vs_target__monthly_revenue_target') }} != 0

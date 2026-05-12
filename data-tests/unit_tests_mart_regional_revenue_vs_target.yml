@@ -1,0 +1,126 @@
+unit_tests:
+
+  # -----------------------------------------------------------------------
+  # Test 1: Happy path — known revenue + known target = correct attainment
+  # -----------------------------------------------------------------------
+  - name: ut_attainment_pct_is_correct
+    description: >
+      A location with $10,000 actual revenue against a $8,000 target should
+      produce 125.00% attainment and a +$2,000 delta.
+    model: mart_regional_revenue_vs_target
+    given:
+      - input: ref('orders')
+        rows:
+          - {order_id: "ord-001", location_id: "loc-a", ordered_at: "2025-01-15", order_total: 6000.00}
+          - {order_id: "ord-002", location_id: "loc-a", ordered_at: "2025-01-22", order_total: 4000.00}
+
+      - input: ref('stg_regional_targets')
+        rows:
+          - {regional_target_id: "abc123", location_id: "loc-a", target_month: "2025-01-01", monthly_revenue_target: 8000.00}
+
+    expect:
+      rows:
+        - {
+            location_id: "loc-a",
+            target_month: "2025-01-01",
+            actual_revenue: 10000.00,
+            monthly_revenue_target: 8000.00,
+            revenue_attainment_pct: 125.00,
+            revenue_vs_target_delta: 2000.00
+          }
+
+  # -----------------------------------------------------------------------
+  # Test 2: Edge case — zero target does not cause divide-by-zero
+  # -----------------------------------------------------------------------
+  - name: ut_zero_target_returns_null_attainment
+    description: >
+      When monthly_revenue_target is 0, revenue_attainment_pct must be null
+      rather than causing a division error. The delta should still reflect
+      the actual revenue (coalesced target of 0).
+    model: mart_regional_revenue_vs_target
+    given:
+      - input: ref('orders')
+        rows:
+          - {order_id: "ord-003", location_id: "loc-b", ordered_at: "2025-02-10", order_total: 5000.00}
+
+      - input: ref('stg_regional_targets')
+        rows:
+          - {regional_target_id: "def456", location_id: "loc-b", target_month: "2025-02-01", monthly_revenue_target: 0.00}
+
+    expect:
+      rows:
+        - {
+            location_id: "loc-b",
+            target_month: "2025-02-01",
+            actual_revenue: 5000.00,
+            monthly_revenue_target: 0.00,
+            revenue_attainment_pct: null,
+            revenue_vs_target_delta: 5000.00
+          }
+
+  # -----------------------------------------------------------------------
+  # Test 3: Edge case — location in orders but missing from seed
+  # -----------------------------------------------------------------------
+  - name: ut_missing_target_produces_null_attainment
+    description: >
+      A location that has orders but no corresponding row in stg_regional_targets
+      should appear in output with null monthly_revenue_target and null
+      revenue_attainment_pct. The left join must not drop the row.
+    model: mart_regional_revenue_vs_target
+    given:
+      - input: ref('orders')
+        rows:
+          - {order_id: "ord-004", location_id: "loc-c", ordered_at: "2025-03-05", order_total: 7500.00}
+
+      - input: ref('stg_regional_targets')
+        rows: []
+
+    expect:
+      rows:
+        - {
+            location_id: "loc-c",
+            target_month: "2025-03-01",
+            actual_revenue: 7500.00,
+            monthly_revenue_target: null,
+            revenue_attainment_pct: null,
+            revenue_vs_target_delta: 7500.00
+          }
+
+  # -----------------------------------------------------------------------
+  # Test 4: Delta arithmetic is correct across over- and under-attainment
+  # -----------------------------------------------------------------------
+  - name: ut_delta_arithmetic_over_and_under
+    description: >
+      Validates that revenue_vs_target_delta is calculated correctly for both
+      over-attainment (positive delta) and under-attainment (negative delta)
+      across two locations in the same month.
+    model: mart_regional_revenue_vs_target
+    given:
+      - input: ref('orders')
+        rows:
+          - {order_id: "ord-005", location_id: "loc-d", ordered_at: "2025-04-10", order_total: 12000.00}
+          - {order_id: "ord-006", location_id: "loc-e", ordered_at: "2025-04-18", order_total: 3000.00}
+
+      - input: ref('stg_regional_targets')
+        rows:
+          - {regional_target_id: "ghi789", location_id: "loc-d", target_month: "2025-04-01", monthly_revenue_target: 10000.00}
+          - {regional_target_id: "jkl012", location_id: "loc-e", target_month: "2025-04-01", monthly_revenue_target: 5000.00}
+
+    expect:
+      rows:
+        - {
+            location_id: "loc-d",
+            target_month: "2025-04-01",
+            actual_revenue: 12000.00,
+            monthly_revenue_target: 10000.00,
+            revenue_attainment_pct: 120.00,
+            revenue_vs_target_delta: 2000.00
+          }
+        - {
+            location_id: "loc-e",
+            target_month: "2025-04-01",
+            actual_revenue: 3000.00,
+            monthly_revenue_target: 5000.00,
+            revenue_attainment_pct: 60.00,
+            revenue_vs_target_delta: -2000.00
+          }

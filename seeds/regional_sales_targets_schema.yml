@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: regional_sales_targets
+    description: >
+      Monthly revenue targets by location, derived from historical order totals
+      with a 50% growth rate applied. One row per location per month. Only covers
+      months in which a location was actively generating orders.
+    columns:
+      - name: location_id
+        description: >
+          Foreign key to the locations mart. Matches the location_id column in
+          stg_orders and the orders mart.
+        tests:
+          - not_null
+
+      - name: target_month
+        description: >
+          The first day of the calendar month this target applies to, in YYYY-MM-DD
+          format. Used to join to order data truncated to month grain.
+        tests:
+          - not_null
+
+      - name: monthly_revenue_target
+        description: >
+          The monthly revenue target in USD for this location, calculated as the
+          location's average historical monthly order_total multiplied by 1.5
+          (50% growth target). Targets are proportional to each location's
+          historical volume and vary by month to reflect observed seasonality.
+        tests:
+          - not_null
